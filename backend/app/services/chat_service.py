@@ -1,8 +1,10 @@
-from openai import AsyncOpenAI
+import asyncio
+
+import google.generativeai as genai
 
 from app.config import settings
 
-_client = AsyncOpenAI(api_key=settings.openai_api_key)
+genai.configure(api_key=settings.gemini_api_key)
 
 SYSTEM_PROMPT = """You are a helpful e-commerce customer support assistant.
 You assist customers with orders, returns, refunds, shipping, and payment queries.
@@ -22,22 +24,41 @@ You: "I'm sorry to hear you're facing a payment issue. I've raised a support tic
 """
 
 
+def _build_gemini_history(messages: list[dict]) -> list[dict]:
+    """Convert OpenAI-style messages to Gemini chat history format."""
+    history = []
+    for msg in messages:
+        role = "user" if msg["role"] == "user" else "model"
+        history.append({"role": role, "parts": [msg["content"]]})
+    return history
+
+
 async def stream_response(messages: list[dict]):
-    """Yield text chunks from GPT-4o for the given conversation messages."""
-    stream = await _client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "system", "content": SYSTEM_PROMPT}] + messages,
-        stream=True,
-        temperature=0.7,
+    """Yield text chunks from Gemini for the given conversation messages."""
+    model = genai.GenerativeModel(
+        model_name="gemini-2.0-flash",
+        system_instruction=SYSTEM_PROMPT,
     )
-    async for chunk in stream:
-        delta = chunk.choices[0].delta.content
-        if delta:
-            yield delta
+
+    history = _build_gemini_history(messages)
+    # Last message is the current user query
+    last_message = history[-1]["parts"][0] if history else ""
+    chat_history = history[:-1] if len(history) > 1 else []
+
+    chat = model.start_chat(history=chat_history)
+
+    def sync_stream():
+        return chat.send_message(last_message, stream=True)
+
+    stream = await asyncio.to_thread(sync_stream)
+
+    for chunk in stream:
+        if chunk.text:
+            yield chunk.text
 
 
 def build_context(db_messages: list) -> list[dict]:
-    """Return last 10 messages formatted for OpenAI API."""
+    """Return last 10 messages formatted for Gemini."""
     recent = db_messages[-10:]
     return [{"role": msg.role.value, "content": msg.content} for msg in recent]
 
