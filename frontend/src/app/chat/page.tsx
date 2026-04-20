@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ChatWindow from "@/components/ChatWindow";
-import VoiceButton from "@/components/VoiceButton";
 import api from "@/lib/api";
 import { clearToken, getToken } from "@/lib/auth";
 import { Message } from "@/types";
@@ -119,7 +118,6 @@ export default function ChatPage() {
 
       <div className="bg-white border-t px-4 py-3">
         <div className="flex items-center gap-2">
-          <VoiceButton onTranscript={setInput} disabled={sending} />
           <input
             ref={inputRef}
             type="text"
